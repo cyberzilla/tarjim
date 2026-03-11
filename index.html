@@ -176,8 +176,9 @@
     </div>
 
     <div id="settingsModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden transform transition-all">
-            <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden transform transition-all flex flex-col max-h-[90vh]">
+            
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0">
                 <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
                     ⚙️ Pengaturan & API Keys
                 </h2>
@@ -186,12 +187,12 @@
                 </button>
             </div>
             
-            <div class="p-6 space-y-6">
+            <div class="p-6 overflow-y-auto space-y-6">
                 
                 <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
                     <div>
                         <h4 class="text-sm font-bold text-indigo-900">Backup Pengaturan</h4>
-                        <p class="text-xs text-indigo-700">Simpan atau pulihkan API Key Anda.</p>
+                        <p class="text-xs text-indigo-700">Simpan atau pulihkan daftar API Anda.</p>
                     </div>
                     <div class="flex gap-2">
                         <input type="file" id="importSettingsInput" accept=".json" class="hidden" onchange="importSettings(event)">
@@ -204,30 +205,25 @@
                     </div>
                 </div>
 
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">1. Tambah API Key Baru</label>
-                        <div class="flex gap-2">
-                            <input type="password" id="newApiKey" placeholder="Tempel key baru di sini..." 
-                                   class="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition placeholder-slate-400">
-                            <button onclick="addApiKey()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded-xl transition shadow-sm">Simpan</button>
-                        </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">1. Tambah API Key Baru</label>
+                    <div class="flex gap-2">
+                        <input type="password" id="newApiKey" placeholder="Tempel key baru di sini..." 
+                               class="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition placeholder-slate-400">
+                        <button onclick="addApiKey()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold py-2 px-4 rounded-xl transition shadow-sm">Simpan</button>
                     </div>
+                </div>
 
-                    <div class="pt-2 border-t border-slate-100">
-                        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 mt-2">2. Pilih API Key Aktif</label>
-                        <div class="flex gap-2">
-                            <select id="savedApiKeys" onchange="changeActiveApiKey()" class="w-full text-sm p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-brand-500 outline-none transition cursor-pointer">
-                                <option value="">-- Belum ada API Key --</option>
-                            </select>
-                            <button onclick="deleteApiKey()" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 font-bold py-2 px-4 rounded-xl transition" title="Hapus Key">Hapus</button>
+                <div class="pt-2 border-t border-slate-100">
+                    <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 mt-2">2. Daftar API Key Tersimpan</label>
+                    
+                    <div id="apiListContainer" class="space-y-2 mt-3">
                         </div>
-                        <p class="text-xs text-slate-500 mt-2 font-medium">API Key yang dipilih di atas akan digunakan untuk memuat model dan menerjemahkan.</p>
-                    </div>
+                    <p class="text-xs text-slate-500 mt-3 font-medium text-center">API akan otomatis berpindah jika yang sedang Aktif terkena Limit.</p>
                 </div>
             </div>
             
-            <div class="bg-slate-50 px-6 py-4 border-t border-slate-200 text-right">
+            <div class="bg-slate-50 px-6 py-4 border-t border-slate-200 text-right shrink-0">
                 <button onclick="closeSettingsModal()" class="bg-brand-600 hover:bg-brand-700 text-white font-bold py-2.5 px-6 rounded-xl transition shadow-md">
                     Selesai
                 </button>
@@ -239,6 +235,7 @@
         // INISIALISASI STATE & LOCAL STORAGE
         let apiKeys = JSON.parse(localStorage.getItem('geminiApiKeys')) || [];
         let activeKey = localStorage.getItem('geminiActiveKey') || '';
+        let keyStatuses = JSON.parse(localStorage.getItem('geminiKeyStatuses')) || {}; // Menyimpan status (ready/limit)
         let savedModel = localStorage.getItem('geminiSavedModel') || '';
         let allTranslations = JSON.parse(localStorage.getItem('geminiSavedTranslations')) || {};
         
@@ -249,9 +246,8 @@
         let isAutoTranslating = false;
 
         window.onload = function() {
-            updateApiKeyDropdown();
+            renderApiKeysList();
             if (activeKey) {
-                document.getElementById('savedApiKeys').value = activeKey;
                 loadModels();
             }
         };
@@ -261,20 +257,15 @@
         // ==========================================
         function openSettingsModal() {
             const modal = document.getElementById('settingsModal');
+            renderApiKeysList(); // Pastikan list up-to-date saat dibuka
             modal.classList.remove('hidden');
-            // Sedikit delay agar transisi opacity terlihat mulus
-            setTimeout(() => {
-                modal.classList.remove('opacity-0');
-            }, 10);
+            setTimeout(() => modal.classList.remove('opacity-0'), 10);
         }
 
         function closeSettingsModal() {
             const modal = document.getElementById('settingsModal');
             modal.classList.add('opacity-0');
-            // Tunggu animasi transisi selesai sebelum di-hidden
-            setTimeout(() => {
-                modal.classList.add('hidden');
-            }, 300);
+            setTimeout(() => modal.classList.add('hidden'), 300);
         }
 
         // ==========================================
@@ -285,7 +276,8 @@
                 tipe_file: 'pengaturan_gemini_spa',
                 apiKeys: apiKeys,
                 activeKey: activeKey,
-                savedModel: savedModel
+                savedModel: savedModel,
+                keyStatuses: keyStatuses
             };
             const jsonString = JSON.stringify(settingsData, null, 4);
             const blob = new Blob([jsonString], { type: "application/json" });
@@ -312,12 +304,14 @@
                     if (data.apiKeys) apiKeys = data.apiKeys;
                     if (data.activeKey) activeKey = data.activeKey;
                     if (data.savedModel) savedModel = data.savedModel;
+                    if (data.keyStatuses) keyStatuses = data.keyStatuses;
                     
                     localStorage.setItem('geminiApiKeys', JSON.stringify(apiKeys));
                     localStorage.setItem('geminiActiveKey', activeKey);
                     localStorage.setItem('geminiSavedModel', savedModel);
+                    localStorage.setItem('geminiKeyStatuses', JSON.stringify(keyStatuses));
                     
-                    updateApiKeyDropdown();
+                    renderApiKeysList();
                     if(activeKey) loadModels();
                     alert(`✅ Pengaturan API & Model berhasil dipulihkan!`);
                 } else {
@@ -346,38 +340,67 @@
         }
 
         // ==========================================
-        // PENGELOLAAN API KEY & MODEL
+        // PENGELOLAAN API KEY & DAFTAR MODAL
         // ==========================================
         function updateApiKeyDisplay() {
             const display = document.getElementById('activeKeyDisplay');
             if (activeKey) {
                 const maskedKey = activeKey.substring(0, 8) + '...' + activeKey.substring(activeKey.length - 4);
                 display.innerHTML = `<span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]"></span> API Aktif: ${maskedKey}`;
-                display.className = "inline-flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm font-semibold border border-green-200";
+                display.className = "inline-flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm font-semibold border border-green-200 transition-all";
             } else {
-                display.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span> Belum Ada API Key`;
-                display.className = "inline-flex items-center gap-2 px-3 py-1 bg-red-50 text-red-600 rounded-full text-sm font-semibold border border-red-100";
+                display.innerHTML = `<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span> Belum Ada API Key Aktif`;
+                display.className = "inline-flex items-center gap-2 px-3 py-1 bg-red-50 text-red-600 rounded-full text-sm font-semibold border border-red-100 transition-all";
             }
         }
 
-        function updateApiKeyDropdown() {
-            const select = document.getElementById('savedApiKeys');
-            select.innerHTML = '';
+        // Fungsi baru untuk merender daftar di dalam Modal
+        function renderApiKeysList() {
+            const container = document.getElementById('apiListContainer');
+            container.innerHTML = '';
             
             if (apiKeys.length === 0) {
-                select.innerHTML = '<option value="">-- Belum ada API Key --</option>';
+                container.innerHTML = '<div class="text-sm text-slate-500 text-center py-5 bg-slate-50 rounded-xl border border-dashed border-slate-300 font-medium">Belum ada API Key yang tersimpan.</div>';
                 updateApiKeyDisplay();
                 return;
             }
 
             apiKeys.forEach((key, index) => {
-                const option = document.createElement('option');
-                option.value = key;
                 const maskedKey = key.substring(0, 8) + '...' + key.substring(key.length - 4);
-                option.textContent = `Key ${index + 1}: ${maskedKey}`;
-                select.appendChild(option);
+                const isActive = key === activeKey;
+                const status = keyStatuses[key] || 'ready';
+                
+                let badgeHTML = '';
+                let borderClass = 'border-slate-200 hover:border-brand-300';
+                
+                if (isActive) {
+                    badgeHTML = '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-bold border border-green-200">🟢 AKTIF</span>';
+                    borderClass = 'border-green-300 bg-green-50/30 shadow-sm';
+                } else if (status === 'limit') {
+                    badgeHTML = '<span class="px-2 py-0.5 bg-red-100 text-red-700 rounded text-[10px] font-bold border border-red-200">🔴 LIMIT KUOTA</span>';
+                    borderClass = 'border-red-200 bg-red-50/30';
+                } else {
+                    badgeHTML = '<span class="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold border border-slate-200">🟡 TERSEDIA</span>';
+                }
+
+                const actionBtns = isActive 
+                    ? `<button onclick="deleteApiKey('${key}')" class="text-xs bg-red-50 hover:bg-red-100 text-red-600 py-1.5 px-2.5 rounded-lg font-bold transition">Hapus</button>`
+                    : `<button onclick="setActiveApiKey('${key}')" class="text-xs bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-100 py-1.5 px-3 rounded-lg font-bold transition">Pakai</button>
+                       <button onclick="deleteApiKey('${key}')" class="text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-50 py-1.5 px-2.5 rounded-lg font-bold transition">🗑️</button>`;
+
+                const itemHTML = `
+                    <div class="flex justify-between items-center p-3 bg-white border ${borderClass} rounded-xl transition duration-200">
+                        <div class="flex flex-col gap-1.5">
+                            <span class="font-mono text-sm font-semibold text-slate-700">Key ${index + 1}: ${maskedKey}</span>
+                            <div>${badgeHTML}</div>
+                        </div>
+                        <div class="flex gap-2">
+                            ${actionBtns}
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', itemHTML);
             });
-            document.getElementById('savedApiKeys').value = activeKey;
             updateApiKeyDisplay();
         }
 
@@ -388,28 +411,44 @@
 
             if (!apiKeys.includes(newKey)) {
                 apiKeys.push(newKey);
-                localStorage.setItem('geminiApiKeys', JSON.stringify(apiKeys));
+                keyStatuses[newKey] = 'ready'; // Set status awal ke ready
                 
-                // Tidak langsung diaktifkan sesuai request
-                updateApiKeyDropdown();
+                localStorage.setItem('geminiApiKeys', JSON.stringify(apiKeys));
+                localStorage.setItem('geminiKeyStatuses', JSON.stringify(keyStatuses));
+                
+                renderApiKeysList();
                 newKeyInput.value = '';
-                alert('✅ API Key berhasil ditambahkan. Silakan pilih dari dropdown untuk mengaktifkannya.');
             } else {
                 alert('API Key ini sudah ada dalam daftar.');
             }
         }
 
-        function deleteApiKey() {
-            const select = document.getElementById('savedApiKeys');
-            const keyToDelete = select.value;
-            if (!keyToDelete) return;
+        function setActiveApiKey(keyToSet) {
+            activeKey = keyToSet;
+            localStorage.setItem('geminiActiveKey', activeKey);
+            
+            // Jika user secara manual memilih key yang statusnya "limit", kita reset menjadi "ready"
+            if (keyStatuses[activeKey] === 'limit') {
+                keyStatuses[activeKey] = 'ready';
+                localStorage.setItem('geminiKeyStatuses', JSON.stringify(keyStatuses));
+            }
+            
+            renderApiKeysList();
+            loadModels();
+        }
 
-            apiKeys = apiKeys.filter(key => key !== keyToDelete);
+        function deleteApiKey(keyToDelete) {
+            apiKeys = apiKeys.filter(k => k !== keyToDelete);
+            delete keyStatuses[keyToDelete]; // Hapus statusnya
+            
             localStorage.setItem('geminiApiKeys', JSON.stringify(apiKeys));
+            localStorage.setItem('geminiKeyStatuses', JSON.stringify(keyStatuses));
             
             if (activeKey === keyToDelete) {
                 if (apiKeys.length > 0) {
-                    activeKey = apiKeys[0];
+                    // Otomatis cari key yang statusnya BUKAN limit jika ada
+                    const nextReadyKey = apiKeys.find(k => keyStatuses[k] !== 'limit');
+                    activeKey = nextReadyKey || apiKeys[0];
                     localStorage.setItem('geminiActiveKey', activeKey);
                 } else {
                     activeKey = '';
@@ -419,27 +458,20 @@
                 }
             }
             
-            updateApiKeyDropdown();
+            renderApiKeysList();
             if (activeKey) loadModels();
-        }
-
-        function changeActiveApiKey() {
-            const select = document.getElementById('savedApiKeys');
-            if (select.value) {
-                activeKey = select.value;
-                localStorage.setItem('geminiActiveKey', activeKey);
-                updateApiKeyDropdown();
-                loadModels();
-            }
         }
 
         function switchToNextApiKey() {
             const currentIndex = apiKeys.indexOf(activeKey);
-            if (currentIndex >= 0 && currentIndex < apiKeys.length - 1) {
-                activeKey = apiKeys[currentIndex + 1];
-                localStorage.setItem('geminiActiveKey', activeKey);
-                updateApiKeyDropdown();
-                return true; 
+            // Cari API key setelah index saat ini yang statusnya bukan 'limit'
+            for (let i = currentIndex + 1; i < apiKeys.length; i++) {
+                if (keyStatuses[apiKeys[i]] !== 'limit') {
+                    activeKey = apiKeys[i];
+                    localStorage.setItem('geminiActiveKey', activeKey);
+                    renderApiKeysList();
+                    return true;
+                }
             }
             return false; 
         }
@@ -640,13 +672,13 @@
         // ==========================================
         // PROSES TERJEMAHAN (API GEMINI)
         // ==========================================
-        const stylePrompts = {
-        'klasik': 'Terjemahkan teks dari dokumen ini ke dalam Bahasa Indonesia dengan gaya bahasa teks keagamaan atau kitab klasik yang khidmat dengan bahasa yang sangat mudah dipahami oleh orang awam. SANGAT PENTING: Pertahankan struktur asli dan salin persis setiap tanda baca (koma, titik, titik dua, tanda seru, catatan kaki, dan seterusnya). INSTRUKSI MUTLAK: HANYA BERIKAN HASIL TERJEMAHANNYA SAJA. Jangan tambahkan kata pengantar, basa-basi, atau kalimat pembuka.',
-        'baku': 'Terjemahkan teks ke dalam Bahasa Indonesia baku (EYD). INSTRUKSI MUTLAK: HANYA BERIKAN HASIL TERJEMAHANNYA SAJA.',
-        'sastrawan': 'Terjemahkan menggunakan gaya bahasa sastrawan yang puitis. INSTRUKSI MUTLAK: HANYA BERIKAN HASIL TERJEMAHANNYA SAJA.',
-        'gaul': 'Terjemahkan menggunakan bahasa gaul sehari-hari. INSTRUKSI MUTLAK: HANYA BERIKAN HASIL TERJEMAHANNYA SAJA.',
-        'genz': 'Terjemahkan menggunakan bahasa anak Gen Z masa kini. INSTRUKSI MUTLAK: HANYA BERIKAN HASIL TERJEMAHANNYA SAJA.'
-    };
+		const stylePrompts = {
+				'klasik': 'Terjemahkan teks dari dokumen ini ke dalam Bahasa Indonesia dengan gaya bahasa teks keagamaan atau kitab klasik yang khidmat dengan bahasa yang sangat mudah dipahami oleh orang awam. SANGAT PENTING: Pertahankan struktur asli dan salin persis setiap tanda baca (koma, titik, titik dua, tanda seru, catatan kaki, dan seterusnya). INSTRUKSI MUTLAK: HANYA BERIKAN HASIL TERJEMAHANNYA SAJA. Jangan tambahkan kata pengantar, basa-basi, atau kalimat pembuka.',
+				'baku': 'Terjemahkan teks ke dalam Bahasa Indonesia baku (EYD). INSTRUKSI MUTLAK: HANYA BERIKAN HASIL TERJEMAHANNYA SAJA.',
+				'sastrawan': 'Terjemahkan menggunakan gaya bahasa sastrawan yang puitis. INSTRUKSI MUTLAK: HANYA BERIKAN HASIL TERJEMAHANNYA SAJA.',
+				'gaul': 'Terjemahkan menggunakan bahasa gaul sehari-hari. INSTRUKSI MUTLAK: HANYA BERIKAN HASIL TERJEMAHANNYA SAJA.',
+				'genz': 'Terjemahkan menggunakan bahasa anak Gen Z masa kini. INSTRUKSI MUTLAK: HANYA BERIKAN HASIL TERJEMAHANNYA SAJA.'
+			};
 
         async function processTranslation() {
             const selectedModel = document.getElementById('modelSelect').value;
@@ -721,6 +753,11 @@
                 loadingIndicator.style.display = '';
                 
                 if (error.message === "LIMIT_API") {
+                    // Tandai Key yang ini terkena limit
+                    keyStatuses[activeKey] = 'limit';
+                    localStorage.setItem('geminiKeyStatuses', JSON.stringify(keyStatuses));
+                    renderApiKeysList(); // Perbarui tampilan di belakang layar
+                    
                     if (isAutoTranslating) {
                         loadingSubText.textContent = "API Limit! Beralih ke Key berikutnya...";
                         loadingIndicator.classList.remove('hidden'); 
@@ -737,7 +774,7 @@
                             return false;
                         }
                     } else {
-                        errorMessage.textContent = "API Key Anda mencapai limit. Buka Pengaturan untuk ganti API Key.";
+                        errorMessage.textContent = "API Key Anda mencapai limit. Buka Pengaturan untuk ganti ke API Key yang Tersedia.";
                         errorMessage.classList.remove('hidden');
                         return false;
                     }
